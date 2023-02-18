@@ -16,8 +16,7 @@ consent_schema_version = "1.0"
 consent_schema_attributes = ["user_id", "data_type", "recipient_id", "consent_given"]
 consent_schema_id, consent_schema = indy_sdk.anoncreds.issuer_create_schema("Issuer1", consent_schema_name, consent_schema_version, consent_schema_attributes)
 
-
-#  create consent credential definition
+#  create & store consent credential definition
 consent_cred_def_config = {'tag': 'default'}
 consent_cred_def = indy_sdk.anoncreds.issuer_create_and_store_credential_def(wallet_handle, 'Issuer1', consent_schema, 'CL', json.dumps(consent_cred_def_config))
 consent_cred_def_id = consent_cred_def['id']
@@ -28,13 +27,14 @@ async def give_consent(user_id, data_type, recipient_id):
     recipient_did, recipient_key = await did.create_and_store_my_did(wallet_handle, "{}")
     pairwise_config = json.dumps({'my_did': user_did, 'their_did': recipient_did})
     await pairwise.create_pairwise(wallet_handle, pairwise_config)
-    
+
     consent_record = {
         "user_id": user_id,
         "data_type": data_type,
         "recipient_id": recipient_id,
         "consent_given": True
     }
+
     consent_record_json = json.dumps(consent_record)
     pool_handle = await indy_sdk.pool.open_pool_ledger('pool1', None)
 
@@ -46,7 +46,7 @@ async def give_consent(user_id, data_type, recipient_id):
     cred, _, _ = await indy_sdk.anoncreds.issuer_create_credential(wallet_handle, cred_offer, cred_req, cred_values, None, None)
     await indy_sdk.anoncreds.prover_store_credential(wallet_handle, None, cred_req_metadata, cred, consent_cred_def, "{}")
 
-      # Write the consent record onto the Indy blockchain
+    # Write the consent record onto the Indy blockchain
     credential_request = {
         'operation': {
             'type': '101',
@@ -62,6 +62,7 @@ async def give_consent(user_id, data_type, recipient_id):
 # function to revoke consent
 async def revoke_consent(user_id, data_type, recipient_id):
     (user_did, user_key), (recipient_did, recipient_key) = await get_pairwise_dids(wallet_handle, recipient_id)
+    # Modified consent record to change the attribute consent_given to false
     consent_record = {
         "user_id": user_id,
         "data_type": data_type,
@@ -86,16 +87,17 @@ async def revoke_consent(user_id, data_type, recipient_id):
 # function to check if consent has been given to third parties for data exchange 
 async def check_consent(user_id, data_type, recipient_id):
     (user_did, user_key), (recipient_did, recipient_key) = await get_pairwise_dids(wallet_handle, recipient_id)
+    
+    # Get the credential for given user, datatype and recipient
     cred_search_handle = await indy_sdk.anoncreds.prover_search_credentials_for_proof_req(wallet_handle, json.dumps({
-        "nonce": "123456",
-        "name": consent_schema_name,
-        "version": consent_schema_version,
+        "name": "consent",
+        "version": "1.0",
         "requested_attributes": {
             "attr1_referent": {"name": "user_id", "restrictions": [{"issuer_did": "Issuer1"}]},
             "attr2_referent": {"name": "data_type", "restrictions": [{"issuer_did": "Issuer1"}]},
             "attr3_referent": {"name": "recipient_id", "restrictions": [{"issuer_did": "Issuer1"}]},
             "attr4_referent": {"name": "consent_given", "restrictions": [{"issuer_did": "Issuer1"}]}
-        }
+        }   
     }))
 
     # Search for the credential that matches the given user_id, data_type, and recipient_id
